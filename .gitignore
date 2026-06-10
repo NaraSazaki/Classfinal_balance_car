@@ -1,6 +1,3 @@
-# Only publish the requested Keil project.
-/go side/
-
 # Keil uVision user/session files.
 *.uvguix.*
 *.uvgui.*
