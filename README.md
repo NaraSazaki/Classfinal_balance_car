@@ -1,11 +1,25 @@
 # Balance Car
 
-本專案包含兩個以 STM32F103C8T6 為核心的 Keil5 / STM32CubeMX 專案，皆已完成實作與燒錄測試。
+### 版本更迭紀錄
 
 - `control`：平衡車控制專案，已成功實現平衡車效果。
-- `go side`：在 `control` 的基礎上加入 TCRT 循跡模組，達成循跡功能，已成功實作。
+- `go side`：在 `control` 的基礎上加入 TCRT5000 和循跡程式，達成循跡功能，能夠在老師提供的循跡線上完成實作。
 
-腳位配置請參考各專案對應的 `.ioc` 檔。
+## 腳位配置
+
+| 功能 | 腳位 |
+|------|------|
+| PWMA | PA0 |
+| PWMB | PA1 |
+| AIN1 | PA4 |
+| AIN2 | PA5 |
+| BIN1 | PA6 |
+| BIN2 | PA7 |
+| MPU6050 SCL | PB6 |
+| MPU6050 SDA | PB7 |
+| USART1_TX/RX | PA9 / PA10|
+| TCRT5000 D0| PA2 / PB1 |
+| USB_DM/DP | PA11 / PA12|
 
 ## 系統架構
 
@@ -15,9 +29,8 @@
 - 開發工具：Keil uVision5、STM32CubeMX
 - 主要感測與控制模組：
   - MPU6050 姿態感測器
-  - 馬達驅動模組
-  - 編碼器或馬達回授訊號
-  - TCRT 循跡模組，使用於 `go side` 專案
+  - TB6612 馬達驅動模組
+  - TCRT5000 循跡模組
   - USB CDC / UART 通訊介面
 
 ### 專案結構
@@ -59,7 +72,7 @@ MPU6050 / 感測器輸入
 平衡車本體運動
 ```
 
-`go side` 專案在上述平衡控制流程外，另外加入 TCRT 循跡模組資料：
+`go side` 專案在上述平衡控制流程外，另外加入 TCRT5000 模組和循跡程式：
 
 ```text
 TCRT 循跡模組輸入
@@ -124,7 +137,7 @@ go side/MDK-ARM/control.uvprojx
 
 ### `go side` 循跡平衡車專案
 
-`go side` 是 `control` 的改進版，在原本平衡車功能上加入 TCRT 循跡模組。系統會同時維持車體平衡，並根據 TCRT 模組輸入修正左右輪輸出，使車體沿著路線移動。
+`go side` 是 `control` 的改進版，在原本平衡車功能上加入 TCRT5000 模組。系統會同時維持車體平衡，並根據 TCRT5000 模組輸入修正左右輪輸出，使車體沿著路線移動。
 
 使用步驟：
 
