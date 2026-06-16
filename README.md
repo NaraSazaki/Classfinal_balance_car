@@ -2,7 +2,7 @@
 
 ### 版本更迭紀錄
 
-- `control`：平衡車控制專案，已成功實現平衡車效果。
+- `control`：純平衡車控制專案，能完成自主平衡實作。
 - `go side`：在 `control` 的基礎上加入 TCRT5000 和循跡程式，達成循跡功能，能夠在老師提供的循跡線上完成實作。
 
 ## 腳位配置
@@ -29,8 +29,8 @@
 - 開發工具：Keil uVision5、STM32CubeMX
 - 主要感測與控制模組：
   - MPU6050 姿態感測器
-  - TB6612 馬達驅動模組
-  - TCRT5000 循跡模組
+  - TB6612FNG 馬達驅動模組
+  - TCRT5000 模組
   - USB CDC / UART 通訊介面
 
 ### 專案結構
@@ -61,7 +61,7 @@ balance-car/
 ### 控制流程
 
 ```text
-MPU6050 / 感測器輸入
+透過 MPU6050 得到角度資訊
         ↓
 姿態角度與速度資料處理
         ↓
@@ -75,11 +75,13 @@ MPU6050 / 感測器輸入
 `go side` 專案在上述平衡控制流程外，另外加入 TCRT5000 模組和循跡程式：
 
 ```text
-TCRT 循跡模組輸入
+TCRT5000 判斷是否檢測到黑線
         ↓
-路線偏移判斷
+循跡路線偏移判斷
         ↓
-左右輪速度修正
+馬達 PWM / 方向控制
+        ↓
+修正左右輪速度
         ↓
 維持平衡並沿線行走
 ```
@@ -93,27 +95,13 @@ TCRT 循跡模組輸入
 - STM32CubeMX，若需要查看或重新產生初始化程式碼
 - ST-Link 驅動與燒錄工具
 
-### 編譯 `control`
+### 編譯 
 
 1. 開啟 Keil uVision5。
-2. 開啟檔案：
+2. 開啟對應` .uvprojx `檔案：
 
 ```text
-control/MDK-ARM/control.uvprojx
-```
-
-3. 確認目標晶片為 `STM32F103C8T6`。
-4. 若需要確認腳位，開啟 `control/control.ioc` 查看 STM32CubeMX 設定。
-5. 點選 `Build` 或按下 `F7` 進行編譯。
-6. 編譯成功後，可使用 Keil 或 ST-Link 將程式燒錄到 STM32F103C8T6。
-
-### 編譯 `go side`
-
-1. 開啟 Keil uVision5。
-2. 開啟檔案：
-
-```text
-go side/MDK-ARM/control.uvprojx
+例:go side/MDK-ARM/control.uvprojx
 ```
 
 3. 確認目標晶片為 `STM32F103C8T6`。
@@ -131,7 +119,7 @@ go side/MDK-ARM/control.uvprojx
 
 1. 接好 STM32F103C8T6、MPU6050、馬達驅動與電源。
 2. 將 `control` 專案編譯並燒錄到 STM32F103C8T6。
-3. 將車體放置於可平衡角度附近。
+3. 將車體放置於可平衡角度附近，在開機或reset後等待1秒初始化。
 4. 上電後觀察車體平衡狀態。
 5. 若車體方向或反應異常，檢查馬達接線、MPU6050 安裝方向與電源供應。
 
@@ -141,16 +129,11 @@ go side/MDK-ARM/control.uvprojx
 
 使用步驟：
 
-1. 接好 STM32F103C8T6、MPU6050、馬達驅動、TCRT 循跡模組與電源。
+1. 接好 STM32F103C8T6、MPU6050、馬達驅動、TCRT5000 模組與電源。
 2. 將 `go side` 專案編譯並燒錄到 STM32F103C8T6。
 3. 將車體放置在循跡線上，並使車體接近平衡角度。
 4. 上電後觀察車體是否能維持平衡並沿線行走。
-5. 若循跡方向異常，檢查 TCRT 循跡模組接線、安裝方向與判斷邏輯。
-
-## 版本說明
-
-- `control`：基礎平衡車版本，已實作成功。
-- `go side`：加入 TCRT 循跡模組的改進版本，已實作成功。
+5. 若循跡方向異常，檢查 TCRT5000 模組接線、安裝方向與判斷邏輯。
 
 ## 注意事項
 
@@ -158,4 +141,5 @@ go side/MDK-ARM/control.uvprojx
 - 腳位配置以各專案的 `.ioc` 檔為準。
 - 燒錄前請確認電源供應穩定，避免馬達啟動造成 MCU 重啟。
 - 第一次測試時建議架高車體或扶住車身，避免馬達輸出過大造成車體摔落。
+- USB和UART接口目前僅啟用，還未設計通訊相關程式。
 - 若重新使用 STM32CubeMX 產生程式碼，請注意保留 `USER CODE BEGIN` 與 `USER CODE END` 區塊內的自訂程式。
