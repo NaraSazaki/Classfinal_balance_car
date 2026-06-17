@@ -72,7 +72,7 @@ balance-car/
     `-- control.ioc
 ```
 
-## 目前 `climb-ramp` 更新內容
+## 目前版本 : `climb-ramp` 
 
 目前的 `climb-ramp` 版本整合了改進後的平衡控制、成功的循跡邏輯，以及爬坡輔助與爬坡循跡能力。
 
