@@ -1,14 +1,18 @@
 # Balance Car
 
-### 版本更迭紀錄
+STM32F103C8T6 balance car projects for self-balancing, TCRT5000 line tracking, and ramp climbing.
 
-- `control`：純平衡車控制專案，能完成自主平衡實作。
-- `go side`：在 `control` 的基礎上加入 TCRT5000 和循跡程式，達成循跡功能，能夠在老師提供的循跡線上完成實作。
+## Projects
 
-## 腳位配置
+- `control`: Base self-balancing program. This is the stable balance-control reference used by later projects.
+- `go side`: Balance car with successful TCRT5000 line tracking logic.
+- `climb-ramp`: Current integrated version for balancing, line tracking, and ramp climbing.
+- `climb-ramp_good`: Backup version saved while improving `climb-ramp`; kept as a more stable reference build.
 
-| 功能 | 腳位 |
-|------|------|
+## Hardware Pins
+
+| Module | Pin |
+| --- | --- |
 | PWMA | PA0 |
 | PWMB | PA1 |
 | AIN1 | PA4 |
@@ -17,129 +21,102 @@
 | BIN2 | PA7 |
 | MPU6050 SCL | PB6 |
 | MPU6050 SDA | PB7 |
-| USART1_TX/RX | PA9 / PA10|
-| TCRT5000 D0| PA2 / PB1 |
-| USB_DM/DP | PA11 / PA12|
+| USART1_TX/RX | PA9 / PA10 |
+| TCRT5000 D0 | PA2 / PB1 |
+| USB_DM/DP | PA11 / PA12 |
 
-## 系統架構
+## Development Environment
 
-### 硬體平台
+- MCU: STM32F103C8T6
+- IDE/tooling: Keil uVision5, STM32CubeMX
+- Main modules:
+  - MPU6050 IMU
+  - TB6612FNG motor driver
+  - TCRT5000 tracking sensors
+  - USB CDC / UART debug support
 
-- MCU：STM32F103C8T6
-- 開發工具：Keil uVision5、STM32CubeMX
-- 主要感測與控制模組：
-  - MPU6050 姿態感測器
-  - TB6612FNG 馬達驅動模組
-  - TCRT5000 模組
-  - USB CDC / UART 通訊介面
-
-### 專案結構
+## Repository Layout
 
 ```text
 balance-car/
-├── control/
-│   ├── Core/
-│   │   ├── Inc/                 # 使用者標頭檔
-│   │   └── Src/                 # 主程式與控制邏輯
-│   ├── Drivers/                 # STM32 HAL / CMSIS 驅動
-│   ├── Middlewares/             # USB Device Library
-│   ├── USB_DEVICE/              # USB CDC 設定
-│   ├── MDK-ARM/                 # Keil5 專案檔
-│   └── control.ioc              # STM32CubeMX 設定與腳位配置
-│
-└── go side/
-    ├── Core/
-    │   ├── Inc/                 # 使用者標頭檔
-    │   └── Src/                 # 平衡控制與循跡控制邏輯
-    ├── Drivers/                 # STM32 HAL / CMSIS 驅動
-    ├── Middlewares/             # USB Device Library
-    ├── USB_DEVICE/              # USB CDC 設定
-    ├── MDK-ARM/                 # Keil5 專案檔
-    └── control.ioc              # STM32CubeMX 設定與腳位配置
+|-- control/
+|   |-- Core/
+|   |-- Drivers/
+|   |-- Middlewares/
+|   |-- USB_DEVICE/
+|   |-- MDK-ARM/
+|   `-- control.ioc
+|
+|-- go side/
+|   |-- Core/
+|   |-- Drivers/
+|   |-- Middlewares/
+|   |-- USB_DEVICE/
+|   |-- MDK-ARM/
+|   `-- control.ioc
+|
+|-- climb-ramp/
+|   |-- Core/
+|   |-- Drivers/
+|   |-- Middlewares/
+|   |-- USB_DEVICE/
+|   |-- MDK-ARM/
+|   `-- control.ioc
+|
+`-- climb-ramp_good/
+    |-- Core/
+    |-- Drivers/
+    |-- Middlewares/
+    |-- USB_DEVICE/
+    |-- MDK-ARM/
+    `-- control.ioc
 ```
 
-### 控制流程
+## Current `climb-ramp` Update
+
+The current `climb-ramp` version combines the improved balance base, successful line tracking, and ramp-climbing behavior.
+
+### Balance
+
+- Uses the improved `control` balance logic.
+- Uses MPU6050 angle estimation with gyro-based derivative control.
+- Includes integral limiting, output limiting, PWM slew limiting, and fall protection.
+
+### Line Tracking
+
+- Uses the successful TCRT5000 logic refined from `go side`.
+- Sensor convention:
+  - LED on means white surface.
+  - LED off means black line.
+- One-black/one-white correction remains active on flat ground and while climbing.
+- Short line-loss hold keeps the last correction briefly when the car bounces and the sensor temporarily loses the line.
+
+### Ramp Climbing
+
+- Adds ramp-climb mode when the body angle reaches the ramp region.
+- Flat-ground tracking keeps the slower, stable behavior.
+- Ramp mode raises motor output only when climbing.
+- Straight ramp climbing can use fixed equal wheel output.
+- Ramp tracking still applies one-black/one-white correction while keeping higher climb power.
+- During ramp correction, the slower wheel is kept at a small nonzero speed to reduce one-sided slipping or free spinning.
+- Ramp mode exits after the body angle returns near flat ground.
+
+## Build
+
+1. Open the desired project in Keil uVision5.
+2. Use the project file under `MDK-ARM`, for example:
 
 ```text
-透過 MPU6050 得到角度資訊
-        ↓
-姿態角度與速度資料處理
-        ↓
-平衡控制演算法
-        ↓
-馬達 PWM / 方向控制
-        ↓
-平衡車本體運動
+climb-ramp/MDK-ARM/control.uvprojx
 ```
 
-`go side` 專案在上述平衡控制流程外，另外加入 TCRT5000 模組和循跡程式：
+3. Select/build for STM32F103C8T6.
+4. Flash with ST-Link.
 
-```text
-TCRT5000 判斷是否檢測到黑線
-        ↓
-循跡路線偏移判斷
-        ↓
-馬達 PWM / 方向控制
-        ↓
-修正左右輪速度
-        ↓
-維持平衡並沿線行走
-```
+Generated Keil build outputs such as `.o`, `.d`, `.axf`, `.hex`, `.map`, and build logs are ignored by Git.
 
-## 編譯方式
+## Notes
 
-### 需求環境
-
-- Keil uVision5
-- STM32F1xx Device Pack
-- STM32CubeMX，若需要查看或重新產生初始化程式碼
-- ST-Link 驅動與燒錄工具
-
-### 編譯 
-
-1. 開啟 Keil uVision5。
-2. 開啟對應` .uvprojx `檔案：
-
-```text
-例:go side/MDK-ARM/control.uvprojx
-```
-
-3. 確認目標晶片為 `STM32F103C8T6`。
-4. 若需要確認腳位，開啟 `go side/control.ioc` 查看 STM32CubeMX 設定。
-5. 點選 `Build` 或按下 `F7` 進行編譯。
-6. 編譯成功後，可使用 Keil 或 ST-Link 將程式燒錄到 STM32F103C8T6。
-
-## 使用說明
-
-### `control` 平衡車專案
-
-`control` 專案用於實現平衡車基本功能。燒錄到 STM32F103C8T6 後，系統會讀取 MPU6050 姿態資料，經由控制演算法計算馬達輸出，使車體維持平衡。
-
-使用步驟：
-
-1. 接好 STM32F103C8T6、MPU6050、馬達驅動與電源。
-2. 將 `control` 專案編譯並燒錄到 STM32F103C8T6。
-3. 將車體放置於可平衡角度附近，在開機或reset後等待1秒初始化。
-4. 上電後觀察車體平衡狀態。
-5. 若車體方向或反應異常，檢查馬達接線、MPU6050 安裝方向與電源供應。
-
-### `go side` 循跡平衡車專案
-
-`go side` 是 `control` 的改進版，在原本平衡車功能上加入 TCRT5000 模組。系統會同時維持車體平衡，並根據 TCRT5000 模組輸入修正左右輪輸出，使車體沿著路線移動。
-
-使用步驟：
-
-1. 接好 STM32F103C8T6、MPU6050、馬達驅動、TCRT5000 模組與電源。
-2. 將 `go side` 專案編譯並燒錄到 STM32F103C8T6。
-3. 將車體放置在循跡線上，並使車體接近平衡角度。
-4. 上電後觀察車體是否能維持平衡並沿線行走。
-5. 若循跡方向異常，檢查 TCRT5000 模組接線、安裝方向與判斷邏輯。
-
-## 注意事項
-
-- 兩個專案皆燒錄於 STM32F103C8T6。
-- 腳位配置以各專案的 `.ioc` 檔為準。
-- 燒錄前請確認電源供應穩定，避免馬達啟動造成 MCU 重啟。
-- 第一次測試時建議架高車體或扶住車身，避免馬達輸出過大造成車體摔落。
-- USB和UART接口目前僅啟用，還未設計通訊相關程式。
-- 若重新使用 STM32CubeMX 產生程式碼，請注意保留 `USER CODE BEGIN` 與 `USER CODE END` 區塊內的自訂程式。
+- Keep changes inside the target project folder when testing a behavior.
+- `climb-ramp_good` is kept as a backup reference before more aggressive ramp changes.
+- If STM32CubeMX regenerates code, check `USER CODE BEGIN` / `USER CODE END` regions before committing.

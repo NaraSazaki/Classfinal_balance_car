@@ -72,9 +72,7 @@ Struct_MPU6050 MPU6050;
 #define RAMP_ASSIST_MAX_ANGLE       15.0f
 #define RAMP_ASSIST_ACTIVE_ANGLE    2.0f
 #define RAMP_FORWARD_MIN_PWM        55
-#define RAMP_TURN_MIN_PWM           55
-#define RAMP_TURN_OUTER_MIN_PWM     70
-#define RAMP_TURN_INNER_PWM         23
+#define RAMP_TURN_MIN_PWM           75
 #define RAMP_FIXED_ANGLE            38.0f
 #define RAMP_RELEASE_ANGLE          25.0f
 #define RAMP_FIXED_PWM              75
@@ -642,22 +640,6 @@ int main(void)
             if (turn < 0)
             {
                 left_pwm += 10;
-            }
-
-            if (ramp_climb_mode && line_turn_mode)
-            {
-                if (turn > 0)
-                {
-                    left_pwm = RAMP_TURN_INNER_PWM;
-                    right_pwm = Keep_Forward_MinPwm(right_pwm,
-                                                     RAMP_TURN_OUTER_MIN_PWM);
-                }
-                else if (turn < 0)
-                {
-                    left_pwm = Keep_Forward_MinPwm(left_pwm,
-                                                    RAMP_TURN_OUTER_MIN_PWM);
-                    right_pwm = RAMP_TURN_INNER_PWM;
-                }
             }
 
             Motor_SetBoth(left_pwm, right_pwm);
