@@ -43,25 +43,38 @@ typedef struct _MPU6050
 Struct_MPU6050 MPU6050;
 
 /* ===================== ????? ===================== */
-
+ 
 #define PWM_MAX        100
 #define PWM_MIN        10
-#define FALL_ANGLE     35.0f
+#define FALL_ANGLE     32.0f
 #define LOOP_TIME_MS   5
+#define INTEGRAL_LIMIT 18.0f
+#define INTEGRAL_ZONE  8.0f
+#define BALANCE_TRIM_ANGLE 4.0f
+#define RECOVERY_ANGLE 22.0f
+#define RECOVERY_PWM_MIN 15
+#define CONTROL_PWM_LIMIT 42
+#define PWM_SLEW_STEP 2
+#define GYRO_INTEGRAL_ZONE 35.0f
+#define FINE_ANGLE 2.0f
+#define FINE_GYRO_ZONE 8.0f
+#define DRIVE_MIN_ANGLE 4.0f
 
 
 
 
 
-float Kp = 20.0f;
-float Ki = 0.0f;
-float Kd = 1.0f;
+float Kp = 5.5f;
+float Ki = 0.18f;
+float Kd = 1.8f;
 
-float target_angle = 15.0f;
+float target_angle = 0.0f;
 float angle = 0.0f;
 float gyro_offset = 0.0f;
+float balance_gyro_y = 0.0f;
 float integral = 0.0f;
 float last_error = 0.0f;
+int last_pwm = 0;
 
 char msg[128];
 
@@ -188,10 +201,10 @@ static void MPU6050_Initialization(void)
     // DLPF ??
     MPU6050_Writebyte(MPU6050_CONFIG, 0x03);
 
-    // Gyro ±250 dps
+    // Gyro ?50 dps
     MPU6050_Writebyte(MPU6050_GYRO_CONFIG, 0x00);
 
-    // Accel ±2g
+    // Accel ?g
     MPU6050_Writebyte(MPU6050_ACCEL_CONFIG, 0x00);
 }
 
@@ -225,6 +238,7 @@ static void MPU6050_ProcessData(Struct_MPU6050 *mpu6050)
 static void MPU6050_Calibrate(void)
 {
     float sum = 0.0f;
+    float angle_sum = 0.0f;
 
     Debug_SendString("Calibrating MPU6050...\r\n");
 
@@ -232,12 +246,21 @@ static void MPU6050_Calibrate(void)
     {
         MPU6050_ProcessData(&MPU6050);
         sum += (float)MPU6050.gyro_y_raw;
+        angle_sum += atan2f(MPU6050.acc_x, MPU6050.acc_z) * 57.2958f;
         HAL_Delay(2);
     }
 
     gyro_offset = sum / 500.0f;
+    target_angle = (angle_sum / 500.0f) + BALANCE_TRIM_ANGLE;
+    angle = target_angle;
+    integral = 0.0f;
+    last_error = 0.0f;
+    last_pwm = 0;
 
-    snprintf(msg, sizeof(msg), "gyro_offset=%.2f\r\n", gyro_offset);
+    snprintf(msg, sizeof(msg),
+             "gyro_offset=%.2f target_angle=%.2f\r\n",
+             gyro_offset,
+             target_angle);
     Debug_SendString(msg);
 }
 
@@ -248,11 +271,11 @@ static float MPU6050_GetBalanceAngle(float dt)
     float ax = MPU6050.acc_x;
     float az = MPU6050.acc_z;
 
-    float gyro_y = ((float)MPU6050.gyro_y_raw - gyro_offset) / 131.0f;
+    balance_gyro_y = ((float)MPU6050.gyro_y_raw - gyro_offset) / 131.0f;
 
     float acc_angle = atan2f(ax, az) * 57.2958f;
 
-    angle = 0.98f * (angle + gyro_y * dt) + 0.02f * acc_angle;
+    angle = 0.98f * (angle + balance_gyro_y * dt) + 0.02f * acc_angle;
 
     return angle;
 }
@@ -319,11 +342,6 @@ static void Motor_SetBoth(int left, int right)
 {
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
-    if (left > 0 && left < PWM_MIN) left = PWM_MIN;
-    if (left < 0 && left > -PWM_MIN) left = -PWM_MIN;
-
-    if (right > 0 && right < PWM_MIN) right = PWM_MIN;
-    if (right < 0 && right > -PWM_MIN) right = -PWM_MIN;
 
     Motor_Left_SetSpeed(left);
     Motor_Right_SetSpeed(right);
@@ -383,30 +401,65 @@ int main(void)
 
             float current_angle = MPU6050_GetBalanceAngle(dt);
 
-            if (current_angle > FALL_ANGLE || current_angle < -FALL_ANGLE)
+            float error = target_angle - current_angle;
+
+            if (fabsf(error) > FALL_ANGLE)
             {
                 Motor_Stop();
                 integral = 0;
                 last_error = 0;
+                last_pwm = 0;
                 continue;
             }
 
-            float error = target_angle - current_angle;
+            if (fabsf(error) < INTEGRAL_ZONE && fabsf(balance_gyro_y) < GYRO_INTEGRAL_ZONE)
+            {
+                integral += error * dt;
 
-            integral += error * dt;
+                if (integral > INTEGRAL_LIMIT) integral = INTEGRAL_LIMIT;
+                if (integral < -INTEGRAL_LIMIT) integral = -INTEGRAL_LIMIT;
+            }
+            else
+            {
+                integral = 0.0f;
+            }
 
-            if (integral > 100) integral = 100;
-            if (integral < -100) integral = -100;
-
-            float derivative = (error - last_error) / dt;
+            float derivative = -balance_gyro_y;
             last_error = error;
 
             float output = Kp * error + Ki * integral + Kd * derivative;
 
-            if (output > PWM_MAX) output = PWM_MAX;
-            if (output < -PWM_MAX) output = -PWM_MAX;
+            if (output > CONTROL_PWM_LIMIT)
+            {
+                output = CONTROL_PWM_LIMIT;
+                if (error > 0.0f) integral -= error * dt;
+            }
+            if (output < -CONTROL_PWM_LIMIT)
+            {
+                output = -CONTROL_PWM_LIMIT;
+                if (error < 0.0f) integral -= error * dt;
+            }
 
             int pwm = (int)output;
+
+            if (fabsf(error) < FINE_ANGLE && fabsf(balance_gyro_y) < FINE_GYRO_ZONE)
+            {
+                pwm = 0;
+            }
+            else if (fabsf(error) > RECOVERY_ANGLE && pwm != 0)
+            {
+                if (pwm > 0 && pwm < RECOVERY_PWM_MIN) pwm = RECOVERY_PWM_MIN;
+                if (pwm < 0 && pwm > -RECOVERY_PWM_MIN) pwm = -RECOVERY_PWM_MIN;
+            }
+            else if (fabsf(error) > DRIVE_MIN_ANGLE && pwm != 0)
+            {
+                if (pwm > 0 && pwm < PWM_MIN) pwm = PWM_MIN;
+                if (pwm < 0 && pwm > -PWM_MIN) pwm = -PWM_MIN;
+            }
+
+            if (pwm > last_pwm + PWM_SLEW_STEP) pwm = last_pwm + PWM_SLEW_STEP;
+            if (pwm < last_pwm - PWM_SLEW_STEP) pwm = last_pwm - PWM_SLEW_STEP;
+            last_pwm = pwm;
 
             Motor_SetBoth(pwm, pwm);
 
@@ -415,19 +468,16 @@ int main(void)
                 last_print = now;
 
                 snprintf(msg, sizeof(msg),
-                         "angle=%.2f pwm=%d err=%.2f\r\n",
+                         "angle=%.2f target=%.2f pwm=%d err=%.2f int=%.2f gyro=%.2f\r\n",
                          current_angle,
+                         target_angle,
                          pwm,
-                         error);
+                         error,
+                         integral,
+                         balance_gyro_y);
 
                 Debug_SendString(msg);
             }
-									HAL_UART_Transmit(&huart1,
-                  (uint8_t*)"START\r\n",
-                  7,
-                  100);
-
-					Debug_SendString(msg);
         }
 				
 				
